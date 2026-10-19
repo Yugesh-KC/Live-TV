@@ -59,22 +59,39 @@ tv_app/
         │   ├── java/com/livetv/app/
         │   │   ├── Channel.kt              data model
         │   │   ├── M3uParser.kt            M3U parsing
+        │   │   ├── ChannelMerger.kt        merges quality feeds + backup links
         │   │   ├── PlaylistRepository.kt   download + disk cache
-        │   │   ├── Prefs.kt                URL, favorites, dim option
+        │   │   ├── Prefs.kt                URLs, favorites, quality, dim option
         │   │   ├── MainViewModel.kt        ExoPlayer, filtering, favorites, timeouts/errors
         │   │   ├── MainActivity.kt         UI, fullscreen, gestures, HDMI/Presentation, remote
         │   │   ├── TvPresentation.kt       fullscreen video on the external display
         │   │   ├── ChannelAdapter.kt       RecyclerView adapter (headers + rows)
-        │   │   └── SettingsActivity.kt     playlist URL, dim option
+        │   │   └── SettingsActivity.kt     playlist + backup URLs, dim option
         │   └── res/                        layouts, icons, themes (values + values-night)
-        └── test/…/M3uParserTest.kt
+        └── test/…/                         M3uParserTest.kt, ChannelMergerTest.kt
 ```
+
+## Get the code
+
+```bash
+git clone https://github.com/Yugesh-KC/Live-TV.git
+cd Live-TV
+```
+
+`local.properties` (your SDK path) is not in the repo. Android Studio creates it on the first sync.
+From a terminal, create it yourself or set `ANDROID_HOME`:
+
+```bash
+echo "sdk.dir=$HOME/Android/Sdk" > local.properties
+```
+
+Run the unit tests with `./gradlew test`.
 
 ## Build the APK in Android Studio
 
 1. Install the **latest stable Android Studio**. The project uses AGP 9.4, which older versions such as 2025.1 can't open.
    Update via *Help → Check for Updates*.
-2. Choose *File → Open* and select the `tv_app` folder. Wait for the Gradle sync to finish.
+2. Choose *File → Open* and select the cloned project folder. Wait for the Gradle sync to finish.
    - If Studio asks for the SDK, install **Android SDK Platform 37** in *Tools → SDK Manager*.
 3. Choose *Build → Generate App Bundles or APKs → Generate APKs*.
 4. When it finishes, click **locate**. The APK is in `app/build/outputs/apk/debug/app-debug.apk`.
@@ -98,7 +115,12 @@ keyAlias=…
 keyPassword=…
 ```
 
+`keystore.properties` and `*.jks` files are gitignored. Never commit them.
+
 ## Install on your phone
+
+Download the latest APK from the [Releases](https://github.com/Yugesh-KC/Live-TV/releases) page,
+or build one yourself as described above.
 
 **Option A: copy the file**
 1. Copy `app-release.apk` to the phone (USB, Google Drive, Telegram, etc.).
