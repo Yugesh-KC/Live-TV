@@ -22,6 +22,8 @@
     <string name="volume_down">Volume down</string>
 
     <string name="playing_on_tv">Playing on TV</string>
+    <string name="cast">Cast</string>
+    <string name="casting_to">Casting to %1$s</string>
     <string name="dim_phone">Dim phone screen while playing on TV</string>
     <string name="tv_connected">TV connected: video is playing on the big screen</string>
     <string name="tv_disconnected">TV disconnected: playback moved to the phone</string>

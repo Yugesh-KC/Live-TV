@@ -1,6 +1,7 @@
 package com.livetv.app
 
 import android.app.Application
+import android.net.Uri
 import android.os.SystemClock
 import android.util.Log
 import androidx.annotation.OptIn
@@ -22,6 +23,17 @@ import androidx.media3.exoplayer.DefaultLoadControl
 import androidx.media3.exoplayer.DefaultRenderersFactory
 import androidx.media3.exoplayer.ExoPlayer
 import androidx.media3.exoplayer.source.DefaultMediaSourceFactory
+import com.google.android.gms.cast.Cast
+import com.google.android.gms.cast.HlsSegmentFormat
+import com.google.android.gms.cast.MediaInfo
+import com.google.android.gms.cast.MediaLoadRequestData
+import com.google.android.gms.cast.MediaStatus
+import com.google.android.gms.cast.framework.CastContext
+import com.google.android.gms.cast.framework.CastSession
+import com.google.android.gms.cast.framework.SessionManagerListener
+import com.google.android.gms.cast.framework.media.RemoteMediaClient
+import com.google.android.gms.common.images.WebImage
+import java.util.concurrent.Executors
 import kotlinx.coroutines.FlowPreview
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -114,6 +126,21 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     /** Times of recent automatic reconnects after network errors on a channel that was playing. */
     private val reconnects = ArrayDeque<Long>()
 
+    /** True once Cast is set up; false on devices without Google Play services. */
+    val castAvailable = MutableStateFlow(false)
+    /** Name of the Cast device while casting, else null. */
+    val castDevice = MutableStateFlow<String?>(null)
+    /** Volume of the Cast device, 0..1. */
+    val castVolume = MutableStateFlow(0.0)
+    private var castContext: CastContext? = null
+    private var castSession: CastSession? = null
+    private val remote: RemoteMediaClient? get() = castSession?.remoteMediaClient
+    val isCasting: Boolean get() = castSession != null
+    /** Stream URL last sent to the Cast device; status updates about other media are ignored. */
+    private var castUrl: String? = null
+    /** True while the Cast device should be playing (not paused, stopped or given up on). */
+    private var castWantsPlay = false
+
     // Many IPTV streams carry MP2 or AC-3 audio, which most phones can't decode in hardware.
     // EXTENSION_RENDERER_MODE_ON adds the FFmpeg audio decoder as a fallback for those codecs.
     private val renderersFactory = DefaultRenderersFactory(app)
@@ -184,6 +211,7 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     init {
         applyQuality()
         loadPlaylist()
+        initCast(app)
     }
 
     fun setQuality(value: Int) {
@@ -273,7 +301,23 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         currentChannel.value = channel
         playerError.value = null
         prefs.lastChannelUrl = channel.url
+        startedOk = false
+        lastEndedRestart = 0L
 
+        if (isCasting) {
+            loadOnCast(channel, stream)
+        } else {
+            playLocally(channel, stream, asHls)
+        }
+
+        timeoutJob?.cancel()
+        timeoutJob = viewModelScope.launch {
+            delay(STREAM_TIMEOUT_MS)
+            if (!startedOk) failSource("no playback within ${STREAM_TIMEOUT_MS / 1000}s")
+        }
+    }
+
+    private fun playLocally(channel: Channel, stream: Stream, asHls: Boolean) {
         val http = DefaultHttpDataSource.Factory()
             .setAllowCrossProtocolRedirects(true)
             .setConnectTimeoutMs(10_000)
@@ -292,18 +336,20 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
         player.setMediaSource(source)
         player.prepare()
         player.playWhenReady = true
-
-        startedOk = false
-        lastEndedRestart = 0L
-        timeoutJob?.cancel()
-        timeoutJob = viewModelScope.launch {
-            delay(STREAM_TIMEOUT_MS)
-            if (!startedOk) failSource("no playback within ${STREAM_TIMEOUT_MS / 1000}s")
-        }
     }
 
     fun playCurrentOrFirst() {
         val ch = currentChannel.value ?: listState.value.playOrder.firstOrNull() ?: return
+        if (isCasting) {
+            val paused = remote?.mediaStatus?.playerState == MediaStatus.PLAYER_STATE_PAUSED
+            if (paused && playerError.value == null && ch == currentChannel.value) {
+                castWantsPlay = true
+                remote?.play()
+            } else {
+                play(ch)
+            }
+            return
+        }
         if (player.playbackState == Player.STATE_IDLE || playerError.value != null || ch != currentChannel.value) {
             play(ch)
         } else {
@@ -312,6 +358,16 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     fun togglePlayPause() {
+        if (isCasting) {
+            val state = remote?.mediaStatus?.playerState
+            if (castWantsPlay && (state == MediaStatus.PLAYER_STATE_PLAYING || state == MediaStatus.PLAYER_STATE_BUFFERING)) {
+                castWantsPlay = false
+                remote?.pause()
+            } else {
+                playCurrentOrFirst()
+            }
+            return
+        }
         if (player.isPlaying || (player.playWhenReady && player.playbackState == Player.STATE_BUFFERING)) {
             player.pause()
         } else {
@@ -352,8 +408,186 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     private fun markUnavailable() {
         Log.w(TAG, "Channel unavailable: ${currentChannel.value?.name}")
         timeoutJob?.cancel()
-        player.stop()
+        if (isCasting) {
+            castWantsPlay = false
+            remote?.stop()
+        } else {
+            player.stop()
+        }
         playerError.value = "Channel unavailable"
+    }
+
+    // ---------------------------------------------------------------- Cast
+
+    private fun initCast(app: Application) {
+        try {
+            CastContext.getSharedInstance(app, Executors.newSingleThreadExecutor())
+                .addOnSuccessListener { ctx ->
+                    castContext = ctx
+                    ctx.sessionManager.addSessionManagerListener(sessionListener, CastSession::class.java)
+                    castAvailable.value = true
+                    // The app was restarted while a Cast session was still running.
+                    ctx.sessionManager.currentCastSession?.let { startCasting(it, resumed = true) }
+                }
+                .addOnFailureListener { Log.i(TAG, "Cast unavailable: ${it.message}") }
+        } catch (e: Exception) {
+            // No (or an outdated) Google Play services: the app works without Cast.
+            Log.i(TAG, "Cast unavailable: ${e.message}")
+        }
+    }
+
+    private fun startCasting(session: CastSession, resumed: Boolean) {
+        if (castSession === session) return
+        val ch = currentChannel.value
+        val wasPlaying = player.playWhenReady && player.playbackState != Player.STATE_IDLE
+        timeoutJob?.cancel()
+        player.pause()
+        player.stop()
+
+        castSession = session
+        session.addCastListener(castListener)
+        session.remoteMediaClient?.registerCallback(remoteCallback)
+        castVolume.value = session.volume
+        val name = session.castDevice?.friendlyName ?: "TV"
+        castDevice.value = name
+        _events.tryEmit(UiEvent.Message("Casting to $name"))
+
+        val client = session.remoteMediaClient
+        if (resumed && client?.hasMediaSession() == true) {
+            // Still playing from before: just follow it.
+            castUrl = client.mediaInfo?.contentId
+            castWantsPlay = client.isPlaying || client.isBuffering
+            startedOk = true
+            syncCastStatus()
+        } else if (ch != null && wasPlaying) {
+            play(ch)
+        }
+    }
+
+    private fun stopCasting() {
+        val session = castSession ?: return
+        val ch = currentChannel.value
+        val resumeLocally = castWantsPlay && playerError.value == null
+        session.removeCastListener(castListener)
+        session.remoteMediaClient?.unregisterCallback(remoteCallback)
+        castSession = null
+        castUrl = null
+        castWantsPlay = false
+        castDevice.value = null
+        timeoutJob?.cancel()
+        isPlaying.value = false
+        playerIdle.value = true
+        // Like other apps: when casting stops, the channel carries on on the phone.
+        if (ch != null && resumeLocally) play(ch)
+    }
+
+    private fun loadOnCast(channel: Channel, stream: Stream) {
+        val client = remote ?: return
+        val meta = com.google.android.gms.cast.MediaMetadata(com.google.android.gms.cast.MediaMetadata.MEDIA_TYPE_MOVIE).apply {
+            putString(com.google.android.gms.cast.MediaMetadata.KEY_TITLE, channel.name)
+            channel.logo?.let { addImage(WebImage(Uri.parse(it))) }
+        }
+        val type = castContentType(stream.url)
+        val info = MediaInfo.Builder(stream.url)
+            .setStreamType(MediaInfo.STREAM_TYPE_LIVE)
+            .setContentType(type)
+            // IPTV HLS streams almost always use MPEG-TS segments; the receiver needs to be told.
+            .apply { if (type == MimeTypes.APPLICATION_M3U8) setHlsSegmentFormat(HlsSegmentFormat.TS) }
+            .setMetadata(meta)
+            .build()
+        val url = stream.url
+        castUrl = url
+        castWantsPlay = true
+        isPlaying.value = false
+        if (stream.userAgent != null || stream.referrer != null) {
+            // The Cast device fetches the stream itself and can't send the custom headers.
+            Log.i(TAG, "Casting a link that needs custom headers; it may not play: $url")
+        }
+        client.load(MediaLoadRequestData.Builder().setMediaInfo(info).setAutoplay(true).build())
+            .setResultCallback { result ->
+                if (castUrl == url && castWantsPlay && !result.status.isSuccess) {
+                    failSource("Cast load failed (${result.status.statusCode})")
+                }
+            }
+    }
+
+    /** Follows the Cast device's player: playing state, success, and errors (next link). */
+    private fun syncCastStatus() {
+        val client = remote ?: return
+        val status = client.mediaStatus
+        val state = status?.playerState ?: MediaStatus.PLAYER_STATE_IDLE
+        val contentId = client.mediaInfo?.contentId
+        // A status about the previous link: ignore it.
+        if (contentId != null && castUrl != null && contentId != castUrl) return
+
+        isPlaying.value = state == MediaStatus.PLAYER_STATE_PLAYING
+        playerIdle.value = state == MediaStatus.PLAYER_STATE_IDLE || state == MediaStatus.PLAYER_STATE_UNKNOWN
+        keepAwake.value = false
+        when (state) {
+            MediaStatus.PLAYER_STATE_PLAYING -> if (!startedOk) {
+                startedOk = true
+                currentChannel.value?.let { ch -> ch.sources.getOrNull(sourceIndex)?.let { workingSource[ch.url] = it.url } }
+                timeoutJob?.cancel()
+            }
+            MediaStatus.PLAYER_STATE_IDLE -> {
+                if (contentId == null || contentId != castUrl || !castWantsPlay) return
+                when (status?.idleReason) {
+                    MediaStatus.IDLE_REASON_ERROR -> failSource("Cast device couldn't play it")
+                    MediaStatus.IDLE_REASON_FINISHED -> failSource("stream ended on the Cast device")
+                    MediaStatus.IDLE_REASON_CANCELED, MediaStatus.IDLE_REASON_INTERRUPTED -> castWantsPlay = false
+                }
+            }
+        }
+    }
+
+    fun setCastVolume(level: Double) {
+        val session = castSession ?: return
+        val v = level.coerceIn(0.0, 1.0)
+        try {
+            session.volume = v
+            castVolume.value = v
+        } catch (e: Exception) {
+            Log.w(TAG, "Couldn't set Cast volume: ${e.message}")
+        }
+    }
+
+    fun adjustCastVolume(delta: Double) = setCastVolume(castVolume.value + delta)
+
+    private val castListener = object : Cast.Listener() {
+        override fun onVolumeChanged() {
+            castSession?.let { castVolume.value = it.volume }
+        }
+    }
+
+    private val remoteCallback = object : RemoteMediaClient.Callback() {
+        override fun onStatusUpdated() = syncCastStatus()
+    }
+
+    private val sessionListener = object : SessionManagerListener<CastSession> {
+        override fun onSessionStarted(session: CastSession, sessionId: String) = startCasting(session, resumed = false)
+        override fun onSessionResumed(session: CastSession, wasSuspended: Boolean) = startCasting(session, resumed = true)
+        override fun onSessionEnded(session: CastSession, error: Int) = stopCasting()
+        override fun onSessionStartFailed(session: CastSession, error: Int) {
+            _events.tryEmit(UiEvent.Message("Couldn't connect to the Cast device"))
+        }
+        override fun onSessionStarting(session: CastSession) = Unit
+        override fun onSessionEnding(session: CastSession) = Unit
+        override fun onSessionResuming(session: CastSession, sessionId: String) = Unit
+        override fun onSessionResumeFailed(session: CastSession, error: Int) = Unit
+        // A short connection loss: the Cast SDK reconnects by itself.
+        override fun onSessionSuspended(session: CastSession, reason: Int) = Unit
+    }
+
+    private fun castContentType(url: String): String {
+        val path = url.substringBefore('?').substringBefore('#').lowercase()
+        return when {
+            path.endsWith(".mpd") -> MimeTypes.APPLICATION_MPD
+            path.endsWith(".mp4") -> MimeTypes.VIDEO_MP4
+            path.endsWith(".mp3") -> MimeTypes.AUDIO_MPEG
+            path.endsWith(".aac") -> MimeTypes.AUDIO_AAC
+            // .m3u8 and the many IPTV links without an extension: HLS.
+            else -> MimeTypes.APPLICATION_M3U8
+        }
     }
 
     private inner class PlayerListener : Player.Listener {
@@ -453,6 +687,11 @@ class MainViewModel(app: Application) : AndroidViewModel(app) {
     }
 
     override fun onCleared() {
+        castContext?.sessionManager?.removeSessionManagerListener(sessionListener, CastSession::class.java)
+        castSession?.let {
+            it.removeCastListener(castListener)
+            it.remoteMediaClient?.unregisterCallback(remoteCallback)
+        }
         player.release()
     }
 

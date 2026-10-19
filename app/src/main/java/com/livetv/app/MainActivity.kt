@@ -48,12 +48,14 @@ import androidx.lifecycle.lifecycleScope
 import androidx.media3.common.util.UnstableApi
 import androidx.media3.ui.PlayerView
 import androidx.recyclerview.widget.LinearLayoutManager
+import com.google.android.gms.cast.framework.CastButtonFactory
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.livetv.app.databinding.ActivityMainBinding
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 import kotlin.math.abs
 import kotlin.math.max
+import kotlin.math.roundToInt
 
 @OptIn(UnstableApi::class)
 class MainActivity : AppCompatActivity() {
@@ -88,8 +90,11 @@ class MainActivity : AppCompatActivity() {
     private val redim = Runnable { applyBrightness(dimmed = true) }
 
     private val isTvMode get() = presentation != null
+    private val isCasting get() = vm.castDevice.value != null
+    /** HDMI TV mode or casting: the phone shows the remote instead of the player. */
+    private val isRemoteMode get() = isTvMode || isCasting
     private val isFullscreen
-        get() = !isTvMode && !youtubeTab && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
+        get() = !isRemoteMode && !youtubeTab && resources.configuration.orientation == Configuration.ORIENTATION_LANDSCAPE
     /** Live TV fullscreen or YouTube fullscreen video: no system bars, toolbar or tabs. */
     private val hideSystemUi get() = isFullscreen || ytCustomView != null
 
@@ -227,10 +232,14 @@ class MainActivity : AppCompatActivity() {
         b.remotePlayPause.setOnClickListener { vm.togglePlayPause() }
         b.volumeDown.setOnClickListener { adjustVolume(AudioManager.ADJUST_LOWER) }
         b.volumeUp.setOnClickListener { adjustVolume(AudioManager.ADJUST_RAISE) }
-        b.volumeSeek.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
         b.volumeSeek.setOnSeekBarChangeListener(object : SeekBar.OnSeekBarChangeListener {
             override fun onProgressChanged(seekBar: SeekBar, progress: Int, fromUser: Boolean) {
-                if (fromUser) audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, progress, 0)
+                if (!fromUser) return
+                if (isCasting) {
+                    vm.setCastVolume(progress.toDouble() / CAST_VOLUME_STEPS)
+                } else {
+                    audioManager.setStreamVolume(AudioManager.STREAM_MUSIC, progress, 0)
+                }
             }
             override fun onStartTrackingTouch(seekBar: SeekBar) = Unit
             override fun onStopTrackingTouch(seekBar: SeekBar) = Unit
@@ -459,7 +468,7 @@ class MainActivity : AppCompatActivity() {
         }
         scope.launch {
             vm.playerError.collect { err ->
-                if (err != null && isTvMode) toast(getString(R.string.channel_unavailable_toast))
+                if (err != null && isRemoteMode) toast(getString(R.string.channel_unavailable_toast))
             }
         }
         scope.launch {
@@ -469,6 +478,16 @@ class MainActivity : AppCompatActivity() {
             }
         }
         scope.launch { vm.keepAwake.collect { updateKeepScreenOn() } }
+        scope.launch { vm.castAvailable.collect { invalidateOptionsMenu() } }
+        scope.launch {
+            vm.castDevice.collect { name ->
+                b.remoteTitle.text = if (name != null) getString(R.string.casting_to, name) else getString(R.string.playing_on_tv)
+                updateOrientation()
+                applyLayout()
+                refreshVolume()
+            }
+        }
+        scope.launch { vm.castVolume.collect { if (isCasting) refreshVolume() } }
         scope.launch {
             combine(vm.quality, vm.videoHeight) { q, h -> qualityLabel(q, h) }.collect { label ->
                 b.nowQuality.text = label
@@ -489,7 +508,7 @@ class MainActivity : AppCompatActivity() {
     // ---------------------------------------------------------------- layout
 
     private fun applyLayout() {
-        val tv = isTvMode
+        val tv = isRemoteMode
         val fullscreen = isFullscreen
         val immersive = hideSystemUi
 
@@ -501,6 +520,9 @@ class MainActivity : AppCompatActivity() {
         b.playerArea.isVisible = !tv
         b.nowBar.isVisible = !tv && !fullscreen
         b.remotePanel.isVisible = tv
+        // The Cast device picks the quality itself, and the phone screen isn't dimmed while casting.
+        b.dimSwitch.isVisible = isTvMode
+        b.remoteQuality.isVisible = isTvMode
         b.listSection.isVisible = !fullscreen
 
         val lp = b.playerArea.layoutParams as LinearLayout.LayoutParams
@@ -672,7 +694,7 @@ class MainActivity : AppCompatActivity() {
     private fun updateOrientation() {
         requestedOrientation = when {
             ytCustomView != null -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
-            isTvMode -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
+            isRemoteMode -> ActivityInfo.SCREEN_ORIENTATION_PORTRAIT
             youtubeTab -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
             mirrorFallback -> ActivityInfo.SCREEN_ORIENTATION_SENSOR_LANDSCAPE
             else -> ActivityInfo.SCREEN_ORIENTATION_UNSPECIFIED
@@ -710,6 +732,13 @@ class MainActivity : AppCompatActivity() {
     }
 
     override fun dispatchKeyEvent(event: KeyEvent): Boolean {
+        // While casting, the volume keys change the TV's volume.
+        if (isCasting && (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN)) {
+            if (event.action == KeyEvent.ACTION_DOWN) {
+                vm.adjustCastVolume(if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP) CAST_VOLUME_STEP else -CAST_VOLUME_STEP)
+            }
+            return true
+        }
         val handled = super.dispatchKeyEvent(event)
         if (event.keyCode == KeyEvent.KEYCODE_VOLUME_UP || event.keyCode == KeyEvent.KEYCODE_VOLUME_DOWN) {
             handler.post { refreshVolume() }
@@ -718,12 +747,22 @@ class MainActivity : AppCompatActivity() {
     }
 
     private fun adjustVolume(direction: Int) {
+        if (isCasting) {
+            vm.adjustCastVolume(if (direction == AudioManager.ADJUST_RAISE) CAST_VOLUME_STEP else -CAST_VOLUME_STEP)
+            return
+        }
         audioManager.adjustStreamVolume(AudioManager.STREAM_MUSIC, direction, AudioManager.FLAG_SHOW_UI)
         refreshVolume()
     }
 
     private fun refreshVolume() {
-        b.volumeSeek.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        if (isCasting) {
+            b.volumeSeek.max = CAST_VOLUME_STEPS
+            b.volumeSeek.progress = (vm.castVolume.value * CAST_VOLUME_STEPS).roundToInt()
+        } else {
+            b.volumeSeek.max = audioManager.getStreamMaxVolume(AudioManager.STREAM_MUSIC)
+            b.volumeSeek.progress = audioManager.getStreamVolume(AudioManager.STREAM_MUSIC)
+        }
     }
 
     // ---------------------------------------------------------------- lifecycle
@@ -793,6 +832,15 @@ class MainActivity : AppCompatActivity() {
 
     override fun onCreateOptionsMenu(menu: Menu): Boolean {
         menuInflater.inflate(R.menu.main, menu)
+        val castItem = menu.findItem(R.id.media_route_menu_item)
+        castItem.isVisible = false
+        if (vm.castAvailable.value) {
+            try {
+                CastButtonFactory.setUpMediaRouteButton(applicationContext, menu, R.id.media_route_menu_item)
+                castItem.isVisible = true
+            } catch (_: Exception) {
+            }
+        }
         return true
     }
 
@@ -819,6 +867,8 @@ class MainActivity : AppCompatActivity() {
         /** Hosts that stay inside the YouTube tab (Google hosts are needed for sign-in and cookie consent). */
         val YOUTUBE_HOSTS = listOf("youtube.com", "youtu.be", "google.com", "youtube-nocookie.com")
         val STANDARD_HEIGHTS = listOf(1080, 720, 480, 360)
+        const val CAST_VOLUME_STEPS = 20
+        const val CAST_VOLUME_STEP = 1.0 / CAST_VOLUME_STEPS
     }
 
     private class SimpleItemSelected(private val onSelected: (Int) -> Unit) : AdapterView.OnItemSelectedListener {

@@ -70,6 +70,9 @@ dependencies {
     implementation("com.google.android.material:material:1.14.0")
     implementation("org.jetbrains.kotlinx:kotlinx-coroutines-android:1.11.0")
     implementation("io.coil-kt:coil:2.7.0")
+    // Google Cast: play channels on a Chromecast / Google TV with the Default Media Receiver.
+    implementation("com.google.android.gms:play-services-cast-framework:22.1.0")
+    implementation("androidx.mediarouter:mediarouter:1.7.0")
 
     testImplementation("junit:junit:4.13.2")
 }

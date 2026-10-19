@@ -13,6 +13,10 @@
         android:theme="@style/Theme.LiveTv"
         android:usesCleartextTraffic="true">
 
+        <meta-data
+            android:name="com.google.android.gms.cast.framework.OPTIONS_PROVIDER_CLASS_NAME"
+            android:value="com.livetv.app.CastOptionsProvider" />
+
         <activity
             android:name=".MainActivity"
             android:configChanges="orientation|screenSize|screenLayout|smallestScreenSize|keyboardHidden|keyboard|navigation"

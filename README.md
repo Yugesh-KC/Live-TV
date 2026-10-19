@@ -42,6 +42,12 @@ the phone becomes the remote.
   - Unplugging the cable moves the video back to the phone with `PlayerView.switchTargetView`, without stopping the stream.
   - If the display can't host a Presentation (plain mirroring), the app switches to fullscreen landscape.
   - The screen stays awake during playback. The phone screen can dim while the TV plays; touch it to brighten for 8 s.
+- **Chromecast / Google TV:** tap the Cast button in the toolbar (it shows up when a Cast device is on the
+  same Wi-Fi). The TV fetches and plays the stream itself, and the phone becomes the remote: ⏮ ⏯ ⏭ and the
+  TV's volume (also with the volume keys). Uses Google's Default Media Receiver, so it needs Google Play services.
+  - Fewer channels play than on the phone. The Cast device can't send the custom user-agent/referrer some
+    streams need, and streams without CORS headers are refused. If a link fails, the next one is tried.
+  - Stopping the cast moves playback back to the phone.
 - Material 3 design with light and dark themes.
 - Min SDK 24, target/compile SDK 37 (Android 17).
 
@@ -62,10 +68,11 @@ tv_app/
         │   │   ├── ChannelMerger.kt        merges quality feeds + backup links
         │   │   ├── PlaylistRepository.kt   download + disk cache
         │   │   ├── Prefs.kt                URLs, favorites, quality, dim option
-        │   │   ├── MainViewModel.kt        ExoPlayer, filtering, favorites, timeouts/errors
+        │   │   ├── MainViewModel.kt        ExoPlayer + Cast playback, filtering, favorites, timeouts/errors
         │   │   ├── MainActivity.kt         UI, fullscreen, gestures, HDMI/Presentation, remote
         │   │   ├── TvPresentation.kt       fullscreen video on the external display
         │   │   ├── ChannelAdapter.kt       RecyclerView adapter (headers + rows)
+        │   │   ├── CastOptionsProvider.kt  Google Cast setup (Default Media Receiver)
         │   │   └── SettingsActivity.kt     playlist + backup URLs, dim option
         │   └── res/                        layouts, icons, themes (values + values-night)
         └── test/…/                         M3uParserTest.kt, ChannelMergerTest.kt
