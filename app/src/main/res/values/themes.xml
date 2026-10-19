@@ -1,0 +1,58 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <style name="Theme.LiveTv" parent="Theme.Material3.DayNight.NoActionBar">
+        <item name="colorPrimary">@color/primary</item>
+        <item name="colorOnPrimary">@color/on_primary</item>
+        <item name="colorPrimaryContainer">@color/primary_container</item>
+        <item name="colorOnPrimaryContainer">@color/on_primary_container</item>
+        <item name="colorSecondaryContainer">@color/secondary_container</item>
+        <item name="colorOnSecondaryContainer">@color/on_secondary_container</item>
+        <item name="android:colorBackground">@color/background</item>
+        <item name="colorSurface">@color/surface</item>
+        <item name="colorSurfaceContainer">@color/surface_container</item>
+        <item name="colorSurfaceContainerHigh">@color/surface_container_high</item>
+        <item name="colorOnSurface">@color/on_surface</item>
+        <item name="colorOnSurfaceVariant">@color/on_surface_variant</item>
+        <item name="colorOutline">@color/outline</item>
+        <item name="android:windowBackground">@color/background</item>
+    </style>
+
+    <style name="Theme.LiveTv.Presentation" parent="Theme.Material3.Dark.NoActionBar">
+        <item name="android:windowBackground">@android:color/black</item>
+        <item name="android:windowFullscreen">true</item>
+        <item name="android:windowNoTitle">true</item>
+    </style>
+
+    <style name="Widget.LiveTv.IconButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">48dp</item>
+        <item name="android:layout_height">48dp</item>
+        <item name="android:background">?attr/selectableItemBackgroundBorderless</item>
+        <item name="android:scaleType">center</item>
+        <item name="tint">?attr/colorOnSurface</item>
+    </style>
+
+    <style name="Widget.LiveTv.OverlayButton" parent="Widget.AppCompat.ImageButton">
+        <item name="android:layout_width">56dp</item>
+        <item name="android:layout_height">56dp</item>
+        <item name="android:layout_margin">24dp</item>
+        <item name="android:background">@drawable/bg_circle_overlay</item>
+        <item name="android:scaleType">center</item>
+        <item name="android:visibility">gone</item>
+        <item name="tint">@android:color/white</item>
+    </style>
+
+    <!-- Small "HD 720p" button that opens the quality picker. -->
+    <style name="Widget.LiveTv.QualityButton" parent="Widget.Material3.Button.TextButton.Icon">
+        <item name="android:minWidth">0dp</item>
+        <item name="android:minHeight">40dp</item>
+        <item name="android:paddingStart">8dp</item>
+        <item name="android:paddingEnd">10dp</item>
+        <item name="android:insetTop">0dp</item>
+        <item name="android:insetBottom">0dp</item>
+        <item name="android:contentDescription">@string/quality</item>
+        <item name="android:text">@string/quality_auto</item>
+        <item name="icon">@drawable/ic_hd</item>
+        <item name="iconPadding">6dp</item>
+        <item name="iconSize">20dp</item>
+    </style>
+</resources>

@@ -1,0 +1,11 @@
+<?xml version="1.0" encoding="utf-8"?>
+<menu xmlns:android="http://schemas.android.com/apk/res/android">
+    <item
+        android:id="@+id/tab_live"
+        android:icon="@drawable/ic_tv"
+        android:title="@string/tab_live" />
+    <item
+        android:id="@+id/tab_youtube"
+        android:icon="@drawable/ic_youtube"
+        android:title="@string/tab_youtube" />
+</menu>

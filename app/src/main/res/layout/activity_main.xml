@@ -1,0 +1,453 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
+    android:id="@+id/root"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:background="?android:colorBackground">
+
+<LinearLayout
+    android:id="@+id/content"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent"
+    android:orientation="vertical">
+
+    <com.google.android.material.appbar.MaterialToolbar
+        android:id="@+id/toolbar"
+        android:layout_width="match_parent"
+        android:layout_height="?attr/actionBarSize"
+        android:background="?attr/colorSurface"
+        app:title="@string/app_name" />
+
+    <!-- Live TV tab. -->
+    <LinearLayout
+        android:id="@+id/live_content"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+    <!-- Phone video. Height is set in code: 16:9 in portrait, full screen in landscape. -->
+    <FrameLayout
+        android:id="@+id/player_area"
+        android:layout_width="match_parent"
+        android:layout_height="220dp"
+        android:background="@android:color/black">
+
+        <androidx.media3.ui.PlayerView
+            android:id="@+id/player_view"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            app:show_buffering="when_playing"
+            app:show_shuffle_button="false"
+            app:show_subtitle_button="false"
+            app:shutter_background_color="@android:color/black" />
+
+        <TextView
+            android:id="@+id/idle_hint"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_pill"
+            android:drawablePadding="8dp"
+            android:gravity="center"
+            android:maxWidth="320dp"
+            android:paddingHorizontal="20dp"
+            android:paddingVertical="12dp"
+            android:text="@string/pick_channel"
+            android:textColor="@android:color/white"
+            android:textSize="15sp"
+            app:drawableStartCompat="@drawable/ic_play"
+            app:drawableTint="@android:color/white" />
+
+        <LinearLayout
+            android:id="@+id/error_overlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="@drawable/bg_pill"
+            android:gravity="center"
+            android:orientation="vertical"
+            android:paddingHorizontal="24dp"
+            android:paddingVertical="14dp"
+            android:visibility="gone">
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/channel_unavailable"
+                android:textColor="@android:color/white"
+                android:textSize="17sp"
+                android:textStyle="bold" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="4dp"
+                android:text="@string/pick_another"
+                android:textColor="#CCFFFFFF"
+                android:textSize="13sp" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/channel_overlay"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|start"
+            android:layout_margin="16dp"
+            android:background="@drawable/bg_pill"
+            android:maxLines="1"
+            android:ellipsize="end"
+            android:paddingHorizontal="16dp"
+            android:paddingVertical="8dp"
+            android:textColor="@android:color/white"
+            android:textSize="16sp"
+            android:textStyle="bold"
+            android:visibility="gone" />
+
+        <ImageButton
+            android:id="@+id/overlay_prev"
+            style="@style/Widget.LiveTv.OverlayButton"
+            android:layout_gravity="start|center_vertical"
+            android:contentDescription="@string/previous_channel"
+            android:src="@drawable/ic_skip_previous" />
+
+        <ImageButton
+            android:id="@+id/overlay_next"
+            style="@style/Widget.LiveTv.OverlayButton"
+            android:layout_gravity="end|center_vertical"
+            android:contentDescription="@string/next_channel"
+            android:src="@drawable/ic_skip_next" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/overlay_quality"
+            style="@style/Widget.LiveTv.QualityButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="top|end"
+            android:layout_margin="16dp"
+            android:textColor="@android:color/white"
+            android:visibility="gone"
+            app:backgroundTint="#99000000"
+            app:iconTint="@android:color/white" />
+    </FrameLayout>
+
+    <!-- Shown under the phone player in portrait. -->
+    <LinearLayout
+        android:id="@+id/now_bar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainer"
+        android:gravity="center_vertical"
+        android:orientation="horizontal"
+        android:paddingStart="16dp"
+        android:paddingEnd="4dp">
+
+        <TextView
+            android:id="@+id/now_title"
+            android:layout_width="0dp"
+            android:layout_height="wrap_content"
+            android:layout_weight="1"
+            android:ellipsize="end"
+            android:maxLines="1"
+            android:text="@string/nothing_playing"
+            android:textAppearance="?attr/textAppearanceTitleSmall" />
+
+        <com.google.android.material.button.MaterialButton
+            android:id="@+id/now_quality"
+            style="@style/Widget.LiveTv.QualityButton"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content" />
+
+        <ImageButton
+            android:id="@+id/now_prev"
+            style="@style/Widget.LiveTv.IconButton"
+            android:contentDescription="@string/previous_channel"
+            android:src="@drawable/ic_skip_previous" />
+
+        <ImageButton
+            android:id="@+id/now_next"
+            style="@style/Widget.LiveTv.IconButton"
+            android:contentDescription="@string/next_channel"
+            android:src="@drawable/ic_skip_next" />
+
+        <ImageButton
+            android:id="@+id/now_fullscreen"
+            style="@style/Widget.LiveTv.IconButton"
+            android:contentDescription="@string/fullscreen"
+            android:src="@drawable/ic_fullscreen" />
+    </LinearLayout>
+
+    <!-- Remote control, shown instead of the phone player while the TV is connected. -->
+    <LinearLayout
+        android:id="@+id/remote_panel"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:background="?attr/colorSurfaceContainer"
+        android:orientation="vertical"
+        android:paddingHorizontal="16dp"
+        android:paddingTop="12dp"
+        android:paddingBottom="8dp"
+        android:visibility="gone">
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageView
+                android:layout_width="20dp"
+                android:layout_height="20dp"
+                android:importantForAccessibility="no"
+                android:src="@drawable/ic_tv"
+                app:tint="?attr/colorPrimary" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                android:text="@string/playing_on_tv"
+                android:textAppearance="?attr/textAppearanceLabelLarge"
+                android:textColor="?attr/colorPrimary" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/remote_channel"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="6dp"
+            android:ellipsize="end"
+            android:gravity="center"
+            android:maxLines="1"
+            android:text="@string/nothing_playing"
+            android:textAppearance="?attr/textAppearanceHeadlineSmall" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center"
+            android:orientation="horizontal">
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/remote_prev"
+                style="@style/Widget.Material3.Button.TonalButton.Icon"
+                android:layout_width="64dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/previous_channel"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_skip_previous"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconSize="28dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/remote_play_pause"
+                style="@style/Widget.Material3.Button.Icon"
+                android:layout_width="80dp"
+                android:layout_height="64dp"
+                android:layout_marginHorizontal="20dp"
+                android:contentDescription="@string/play"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_play"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconSize="36dp" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/remote_next"
+                style="@style/Widget.Material3.Button.TonalButton.Icon"
+                android:layout_width="64dp"
+                android:layout_height="56dp"
+                android:contentDescription="@string/next_channel"
+                android:insetTop="0dp"
+                android:insetBottom="0dp"
+                app:icon="@drawable/ic_skip_next"
+                app:iconGravity="textStart"
+                app:iconPadding="0dp"
+                app:iconSize="28dp" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="8dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <ImageButton
+                android:id="@+id/volume_down"
+                style="@style/Widget.LiveTv.IconButton"
+                android:contentDescription="@string/volume_down"
+                android:src="@drawable/ic_volume_down" />
+
+            <SeekBar
+                android:id="@+id/volume_seek"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:contentDescription="@string/volume" />
+
+            <ImageButton
+                android:id="@+id/volume_up"
+                style="@style/Widget.LiveTv.IconButton"
+                android:contentDescription="@string/volume_up"
+                android:src="@drawable/ic_volume_up" />
+        </LinearLayout>
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+
+            <com.google.android.material.materialswitch.MaterialSwitch
+                android:id="@+id/dim_switch"
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/dim_phone" />
+
+            <com.google.android.material.button.MaterialButton
+                android:id="@+id/remote_quality"
+                style="@style/Widget.LiveTv.QualityButton"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp" />
+        </LinearLayout>
+    </LinearLayout>
+
+    <LinearLayout
+        android:id="@+id/list_section"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:orientation="vertical">
+
+        <EditText
+            android:id="@+id/search"
+            android:layout_width="match_parent"
+            android:layout_height="48dp"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="10dp"
+            android:autofillHints=""
+            android:background="@drawable/bg_search"
+            android:drawablePadding="10dp"
+            android:hint="@string/search_hint"
+            android:imeOptions="actionSearch"
+            android:inputType="text"
+            android:maxLines="1"
+            android:paddingHorizontal="14dp"
+            android:textAppearance="?attr/textAppearanceBodyLarge"
+            app:drawableStartCompat="@drawable/ic_search"
+            app:drawableTint="?attr/colorOnSurfaceVariant" />
+
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginHorizontal="12dp"
+            android:layout_marginTop="8dp"
+            android:orientation="horizontal">
+
+            <Spinner
+                android:id="@+id/category_spinner"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginEnd="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_spinner"
+                android:popupBackground="@drawable/bg_popup"
+                android:contentDescription="@string/category" />
+
+            <Spinner
+                android:id="@+id/country_spinner"
+                android:layout_width="0dp"
+                android:layout_height="44dp"
+                android:layout_marginStart="4dp"
+                android:layout_weight="1"
+                android:background="@drawable/bg_spinner"
+                android:popupBackground="@drawable/bg_popup"
+                android:contentDescription="@string/country" />
+        </LinearLayout>
+
+        <TextView
+            android:id="@+id/status"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center"
+            android:padding="24dp"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+
+        <androidx.swiperefreshlayout.widget.SwipeRefreshLayout
+            android:id="@+id/swipe_refresh"
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_marginTop="6dp"
+            android:layout_weight="1">
+
+            <androidx.recyclerview.widget.RecyclerView
+                android:id="@+id/channel_list"
+                android:layout_width="match_parent"
+                android:layout_height="match_parent"
+                android:clipToPadding="false"
+                android:paddingBottom="8dp"
+                android:scrollbars="vertical" />
+        </androidx.swiperefreshlayout.widget.SwipeRefreshLayout>
+    </LinearLayout>
+    </LinearLayout>
+
+    <!-- YouTube tab: the mobile site in a WebView. -->
+    <FrameLayout
+        android:id="@+id/youtube_container"
+        android:layout_width="match_parent"
+        android:layout_height="0dp"
+        android:layout_weight="1"
+        android:visibility="gone">
+
+        <WebView
+            android:id="@+id/youtube_web"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent" />
+
+        <com.google.android.material.progressindicator.LinearProgressIndicator
+            android:id="@+id/youtube_progress"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:indeterminate="false"
+            android:visibility="gone" />
+
+        <TextView
+            android:id="@+id/youtube_error"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:background="?android:colorBackground"
+            android:gravity="center"
+            android:padding="24dp"
+            android:text="@string/youtube_load_error"
+            android:textAppearance="?attr/textAppearanceBodyMedium"
+            android:textColor="?attr/colorOnSurfaceVariant"
+            android:visibility="gone" />
+    </FrameLayout>
+
+    <com.google.android.material.bottomnavigation.BottomNavigationView
+        android:id="@+id/bottom_nav"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        app:labelVisibilityMode="labeled"
+        app:menu="@menu/bottom_nav" />
+</LinearLayout>
+
+    <!-- YouTube's fullscreen video is placed here. -->
+    <FrameLayout
+        android:id="@+id/fullscreen_container"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="@android:color/black"
+        android:visibility="gone" />
+</FrameLayout>
